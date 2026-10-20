@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# ── Данные: в репозиторий НИКОГДА не попадают ──
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.db
+*.sqlite
+data/
+
+# ── Исключение: шаблоны и фейковые данные — разрешаем явно ──
+!templates/*.xlsx
+!tests/fixtures/*.xlsx
