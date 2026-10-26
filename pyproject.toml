@@ -12,3 +12,19 @@ hr-pulse = "hr_pulse:main"
 [build-system]
 requires = ["uv_build>=0.13.4,<0.14.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 100 # максимальная длина строки (по умолчанию 88 — тесновато)
+target-version = "py312" # пишем под Python 3.12
+src = ["src", "tests"] # где искать свой код — для правильной сортировки импортов
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "N"] # наборы правил из раздела 4
+[tool.pytest.ini_options]
+testpaths = ["tests"] # где искать тесты
+addopts = "-ra" # в конце — краткая сводка по упавшим и пропущенным
