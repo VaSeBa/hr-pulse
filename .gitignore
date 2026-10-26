@@ -20,4 +20,5 @@ data/
 
 # ── Исключение: шаблоны и фейковые данные — разрешаем явно ──
 !templates/*.xlsx
-!tests/fixtures/*.xlsx.idea/
+!tests/fixtures/*.xlsx
+.idea/
