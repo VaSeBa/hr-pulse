@@ -38,6 +38,12 @@ class Episode:
             return False
         return self.fire_date is None or day <= self.fire_date
 
+    def tenure_days(self, on: date) -> int:
+        """Стаж в этом эпизоде на дату on, в календарных днях."""
+
+        end = on if self.fire_date is None else min(on, self.fire_date)
+        return max(0, (end - self.hire_date).days)
+
 
 @dataclass(frozen=True)
 class Person:
@@ -50,3 +56,8 @@ class Person:
     def first_hire_date(self) -> date:
         """Дата самого первого приёма."""
         return min(episode.hire_date for episode in self.episodes)
+
+    @property
+    def is_rehired(self) -> bool:
+        """Принимался ли человек больше одного раза."""
+        return len(self.episodes) > 1
