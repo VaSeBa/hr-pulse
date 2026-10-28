@@ -1,0 +1,33 @@
+# Проверки на серверах GitHub после каждого push
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Скачать код репозитория
+        uses: actions/checkout@v4
+
+      - name: Установить uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Установить зависимости строго по uv.lock
+        run: uv sync --locked
+
+      - name: Ruff — ошибки и стиль
+        run: uv run ruff check .
+
+      - name: Ruff — оформление
+        run: uv run ruff format --check .
+
+      - name: Тесты
+        run: uv run pytest
