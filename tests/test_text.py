@@ -17,12 +17,14 @@ def test_lowercase_and_trim():
         pytest.param("Дата приёма", "дата приема", id="yo-to-e"),
         pytest.param("Таб.\xa0номер", "таб номер", id="nbsp-and-dot"),
         pytest.param("СНИЛС", "снилс", id="uppercase"),
-        pytest.param("Подразделение.Функциональный блок (Подразделения)",
+        pytest.param(
+            "Подразделение.Функциональный блок (Подразделения)",
             "подразделение функциональный блок подразделения",
-            id="dots-and-brackets"),
-        pytest.param("Табельный номер (с префиксами)",
-            "табельный номер с префиксами",
-            id="brackets")
+            id="dots-and-brackets",
+        ),
+        pytest.param(
+            "Табельный номер (с префиксами)", "табельный номер с префиксами", id="brackets"
+        ),
     ],
 )
 def test_normalize_header_cases(raw, expected):
