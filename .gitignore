@@ -22,3 +22,4 @@ data/
 !templates/*.xlsx
 !tests/fixtures/*.xlsx
 .idea/
+practice/
