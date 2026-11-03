@@ -8,9 +8,16 @@ import pandas as pd
 import pytest
 from openpyxl import Workbook
 
-from hr_pulse.demo.export_1c import write_employees_report
+from hr_pulse.demo.export_1c import write_employees_report, write_reasons_report
 from hr_pulse.demo.generator import FakeCompany, GeneratorConfig
-from hr_pulse.ingest.reader import LoadedTable, describe, find_header_row, read_1c_table
+from hr_pulse.ingest.reader import (
+    LoadedTable,
+    combine_headers,
+    describe,
+    find_header_row,
+    has_subheader,
+    read_1c_table,
+)
 
 # ---------- find_header_row: на маленьких таблицах, собранных вручную ----------
 
@@ -105,3 +112,77 @@ def test_describe_has_no_personal_data(table, rows):
     text = describe(table)
     assert text == f"Заголовок в строке 9, строк данных: {len(rows)}, колонок: 11"
     assert rows[0].full_name not in text
+
+
+# ---------- шаг 2.2: двухуровневый заголовок ----------
+
+NAN = float("nan")
+
+
+def test_combine_headers_takes_subheader():
+    top = ["Должность", "сотрудник", NAN]
+    sub = [NAN, "Сотрудник.Таб. номер", "Сотрудник"]
+    assert combine_headers(top, sub) == ["Должность", "Сотрудник.Таб. номер", "Сотрудник"]
+
+
+def test_combine_headers_without_subheaders_keeps_top():
+    assert combine_headers(["Таб. номер", "ФИО"], [NAN, None]) == ["Таб. номер", "ФИО"]
+
+
+def test_combine_headers_lengths_must_match():
+    with pytest.raises(ValueError):
+        combine_headers(["А", "Б"], ["В"])
+
+
+def test_subheader_found_under_merged_cells():
+    raw = pd.DataFrame(
+        [
+            ["Должность", "сотрудник", None],
+            [None, "Таб. номер", "ФИО"],
+            ["Монтажник", "00-1", "Иванов И. И."],
+        ]
+    )
+    assert has_subheader(raw, 0) is True
+
+
+def test_data_row_is_not_subheader():
+    raw = pd.DataFrame(
+        [
+            ["Таб. номер", None, "ФИО", "Должность"],  # None — служебная колонка
+            ["00-1", None, "Иванов И. И.", "Монтажник"],
+        ]
+    )
+    assert has_subheader(raw, 0) is False
+
+
+def test_no_row_below_header():
+    assert has_subheader(pd.DataFrame([["Таб. номер", "ФИО"]]), 0) is False
+
+
+@pytest.fixture(scope="module")
+def reasons(rows, tmp_path_factory):
+    path = tmp_path_factory.mktemp("reasons") / "reasons.xlsx"
+    write_reasons_report(rows, path, period="01.01.2024 - 30.09.2026")
+    return read_1c_table(path)
+
+
+def test_reasons_header_is_two_rows(reasons):
+    assert reasons.header_row == 4
+    assert reasons.header_depth == 2
+
+
+def test_reasons_columns_from_both_rows(reasons):
+    columns = list(reasons.frame.columns)
+    assert "Причина по мнению HR" in columns  # из верхней строки
+    assert "Сотрудник.Таб. номер" in columns  # из нижней строки
+    assert "сотрудник" not in columns  # название группы не осталось
+    assert "Дата регистрации" not in columns  # пустая колонка убрана
+
+
+def test_reasons_one_row_per_dismissal(reasons, rows):
+    fired = [row for row in rows if row.episode.fire_reason is not None]
+    assert len(reasons.frame) == len(fired)  # строка подзаголовков не попала в данные
+
+
+def test_describe_two_row_header(reasons):
+    assert describe(reasons).startswith("Заголовок в строках 4–5, ")
