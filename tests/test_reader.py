@@ -15,8 +15,10 @@ from hr_pulse.ingest.reader import (
     combine_headers,
     describe,
     find_header_row,
+    find_label_value,
     has_subheader,
     read_1c_table,
+    value_right_of,
 )
 
 # ---------- find_header_row: на маленьких таблицах, собранных вручную ----------
@@ -186,3 +188,45 @@ def test_reasons_one_row_per_dismissal(reasons, rows):
 
 def test_describe_two_row_header(reasons):
     assert describe(reasons).startswith("Заголовок в строках 4–5, ")
+
+
+# ---------- шаг 2.3: «Количество» из шапки отчёта ----------
+
+
+@pytest.mark.parametrize(
+    ("values", "col", "expected"),
+    [
+        pytest.param(["Количество", NAN, NAN, "2 000"], 0, "2 000", id="gaps-between"),
+        pytest.param(["Количество", "15"], 0, "15", id="right-next"),
+        pytest.param(["Количество", NAN, NAN], 0, None, id="nothing-right"),
+        pytest.param(["А", "Количество", "7", "8"], 1, "7", id="first-on-the-right"),
+        pytest.param(["5", "Количество", NAN], 1, None, id="left-does-not-count"),
+    ],
+)
+def test_value_right_of(values, col, expected):
+    assert value_right_of(values, col) == expected
+
+
+def test_find_label_value_in_report_header():
+    raw = pd.DataFrame(
+        [
+            ["Личные данные сотрудников", None, None],
+            ["Количество", None, "1\xa0234"],
+            ["Таб. номер", "ФИО", "СНИЛС"],
+        ]
+    )
+    assert find_label_value(raw, "количество", last_row=2) == "1\xa0234"
+
+
+def test_find_label_value_ignores_table_below_header():
+    raw = pd.DataFrame([["Таб. номер", "ФИО"], ["Количество", "5"]])
+    assert find_label_value(raw, "количество", last_row=0) is None
+
+
+def test_report_count_read_as_number(table, rows):
+    people = len({row.episode.snils for row in rows})
+    assert table.report_count == people
+
+
+def test_reasons_have_no_report_count(reasons):
+    assert reasons.report_count is None

@@ -1,13 +1,15 @@
 """Посмотреть структуру выгрузки: uv run python -m hr_pulse.ingest путь/к/файлу.xlsx
 
-Печатает только структуру — где заголовок, число строк, названия колонок,
-их заполненность и отметку «даты». Сами данные (ФИО, СНИЛС) на экран не выводятся,
-поэтому команду можно безопасно запускать и на реальных выгрузках.
+Печатает только структуру — где заголовок, число строк, сверку с «Количество»
+из шапки, названия колонок, их заполненность и отметку «даты». Сами данные
+(ФИО, СНИЛС) на экран не выводятся, поэтому команду можно безопасно запускать
+и на реальных выгрузках.
 """
 
 import sys
 from pathlib import Path
 
+from hr_pulse.ingest.checks import check_table, describe_check
 from hr_pulse.ingest.convert import date_share
 from hr_pulse.ingest.reader import describe, read_1c_table
 
@@ -21,6 +23,7 @@ def main() -> None:
 
     table = read_1c_table(Path(sys.argv[1]))
     print(describe(table))
+    print("Сверка с шапкой:", describe_check(check_table(table)))
     print("Колонки:")
     for number, name in enumerate(table.frame.columns, start=1):
         column = table.frame[name]

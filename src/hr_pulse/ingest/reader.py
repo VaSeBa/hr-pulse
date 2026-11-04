@@ -10,11 +10,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from hr_pulse.core.formats_1c import is_blank
+from hr_pulse.core.formats_1c import is_blank, parse_count
+from hr_pulse.core.text import normalize_header
 
 HEADER_SEARCH_ROWS = 30  # заголовок ищем среди первых 30 строк
 HEADER_MIN_SHARE = 0.6  # в строке заголовков заполнено ≥ 60% от самой «полной» строки
 SUBHEADER_EMPTY_SHARE = 0.5  # под обычными заголовками строка подзаголовков пуста ≥ на 50%
+COUNT_LABEL = "количество"  # подпись в шапке отчёта 1С, справа от неё — число
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,7 @@ class LoadedTable:
     frame: pd.DataFrame  # сама таблица: колонки — заголовки, строки — данные
     header_row: int  # номер строки заголовков в Excel (с 1, как видит человек)
     header_depth: int = 1  # сколько строк занимает заголовок: 1 или 2
+    report_count: int | None = None  # «Количество» из шапки отчёта; None — его там нет
 
 
 def read_raw(path: Path) -> pd.DataFrame:
@@ -84,6 +87,40 @@ def combine_headers(top: list, sub: list) -> list:
     ]
 
 
+def value_right_of(values: list, col: int) -> str | None:
+    """Первое непустое значение правее ячейки col; если правее всё пусто — None."""
+    for value in values[col + 1 :]:
+        if not is_blank(value):
+            return str(value)
+
+    return None
+
+
+def find_label_value(raw: pd.DataFrame, label: str, *, last_row: int) -> str | None:
+    """Значение справа от подписи label в шапке отчёта (строки выше last_row).
+
+    В шапке 1С подпись и значение стоят в одной строке, между ними пустые ячейки:
+    «Количество | | | | 2 000». Подпись сравниваем после normalize_header.
+    """
+    for row_index in range(min(last_row, len(raw))):
+        values = list(raw.iloc[row_index])
+        for col, value in enumerate(values):
+            if not is_blank(value) and normalize_header(str(value)) == label:
+                return value_right_of(values, col)
+    return None
+
+
+def read_report_count(raw: pd.DataFrame, header_index: int) -> int | None:
+    """«Количество» из шапки отчёта числом; нет подписи или там не число — None."""
+    text = find_label_value(raw, COUNT_LABEL, last_row=header_index)
+    if text is None:
+        return None
+    try:
+        return parse_count(text)
+    except ValueError:
+        return None  # сверка — подсказка, а не данные: без неё файл всё равно читаем
+
+
 def read_1c_table(path: Path) -> LoadedTable:
     """Прочитать выгрузку 1С с одно- или двухуровневым заголовком."""
     raw = read_raw(path)
@@ -102,7 +139,12 @@ def read_1c_table(path: Path) -> LoadedTable:
     frame = frame.dropna(axis="index", how="all")  # и полностью пустые строки
     frame = frame.reset_index(drop=True)  # пронумеровать строки заново с 0
 
-    return LoadedTable(frame=frame, header_row=header_index + 1, header_depth=depth)
+    return LoadedTable(
+        frame=frame,
+        header_row=header_index + 1,
+        header_depth=depth,
+        report_count=read_report_count(raw, header_index),
+    )
 
 
 def describe(table: LoadedTable) -> str:
