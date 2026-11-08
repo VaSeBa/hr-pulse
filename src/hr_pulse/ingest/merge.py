@@ -5,7 +5,7 @@
 слева — список сотрудников, справа — справочник причин, ключ — табельный номер.
 
 Запуск: uv run python -m hr_pulse.ingest.merge сотрудники.xlsx причины.xlsx
-        [--fire-date "Адрес места проживания"]
+        [--fire-date "Адрес места проживания"] [--reference справочник.xlsx]
 Печатает только числа — без ФИО, СНИЛС и табельных номеров.
 """
 
@@ -20,6 +20,7 @@ from hr_pulse.core.formats_1c import is_blank
 from hr_pulse.ingest.convert import parse_date_columns
 from hr_pulse.ingest.mapping import apply_mapping, map_columns
 from hr_pulse.ingest.reader import read_1c_table
+from hr_pulse.ingest.reasons import apply_reference, describe_reasons, load_reference
 
 KEY = Field.TAB_NUMBER.value  # «tab_number» — колонка, по которой связываем
 EMPLOYEES_NEED = (Field.TAB_NUMBER, Field.SNILS, Field.HIRE_DATE, Field.FIRE_DATE)
@@ -124,18 +125,23 @@ def main() -> None:
     parser.add_argument("employees", type=Path, help="выгрузка «Личные данные сотрудников»")
     parser.add_argument("reasons", type=Path, help="выгрузка «Причины увольнений»")
     parser.add_argument("--fire-date", help="колонка с датой увольнения, если не узналась сама")
+    parser.add_argument("--reference", type=Path, help="справочник причин «Входит / Не входит»")
     args = parser.parse_args()
 
     overrides = {args.fire_date: Field.FIRE_DATE} if args.fire_date else None
     try:
         employees = load_mapped(args.employees, overrides)
         result = merge_reasons(employees, load_mapped(args.reasons))
+        book = load_reference(args.reference) if args.reference else None
     except ValueError as error:
         print(f"Не получилось объединить: {error}")
         print("Какие колонки узнались, покажет: uv run python -m hr_pulse.ingest файл.xlsx")
         raise SystemExit(1) from error
     for line in describe_merge(result):
         print(line)
+    if book is not None:
+        for line in describe_reasons(apply_reference(result.frame, book)):
+            print(line)
 
 
 if __name__ == "__main__":
