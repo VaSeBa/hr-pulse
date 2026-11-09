@@ -5,7 +5,7 @@
 слева — список сотрудников, справа — справочник причин, ключ — табельный номер.
 
 Запуск: uv run python -m hr_pulse.ingest.merge сотрудники.xlsx причины.xlsx
-        [--fire-date "Адрес места проживания"] [--reference справочник.xlsx]
+        [--fire-date "Адрес места проживания"] [--reference справочник.xlsx] [--rehire-days 7]
 Печатает только числа — без ФИО, СНИЛС и табельных номеров.
 """
 
@@ -21,6 +21,7 @@ from hr_pulse.ingest.convert import parse_date_columns
 from hr_pulse.ingest.mapping import apply_mapping, map_columns
 from hr_pulse.ingest.reader import read_1c_table
 from hr_pulse.ingest.reasons import apply_reference, describe_reasons, load_reference
+from hr_pulse.ingest.rehires import REHIRE_GAP_DAYS, describe_rehires, mark_rehires
 
 KEY = Field.TAB_NUMBER.value  # «tab_number» — колонка, по которой связываем
 EMPLOYEES_NEED = (Field.TAB_NUMBER, Field.SNILS, Field.HIRE_DATE, Field.FIRE_DATE)
@@ -126,6 +127,12 @@ def main() -> None:
     parser.add_argument("reasons", type=Path, help="выгрузка «Причины увольнений»")
     parser.add_argument("--fire-date", help="колонка с датой увольнения, если не узналась сама")
     parser.add_argument("--reference", type=Path, help="справочник причин «Входит / Не входит»")
+    parser.add_argument(
+        "--rehire-days",
+        type=int,
+        default=REHIRE_GAP_DAYS,
+        help="перерыв в днях до нового приёма, который считаем техническим (%(default)s)",
+    )
     args = parser.parse_args()
 
     overrides = {args.fire_date: Field.FIRE_DATE} if args.fire_date else None
@@ -139,9 +146,15 @@ def main() -> None:
         raise SystemExit(1) from error
     for line in describe_merge(result):
         print(line)
+    frame = result.frame
     if book is not None:
-        for line in describe_reasons(apply_reference(result.frame, book)):
+        reasons = apply_reference(frame, book)
+        frame = reasons.frame
+        for line in describe_reasons(reasons):
             print(line)
+    rehires = mark_rehires(frame, args.rehire_days)
+    for line in describe_rehires(rehires, args.rehire_days):
+        print(line)
 
 
 if __name__ == "__main__":
