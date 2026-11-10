@@ -27,6 +27,7 @@ class LoadedTable:
     header_row: int  # номер строки заголовков в Excel (с 1, как видит человек)
     header_depth: int = 1  # сколько строк занимает заголовок: 1 или 2
     report_count: int | None = None  # «Количество» из шапки отчёта; None — его там нет
+    source_rows: tuple[int, ...] = ()  # номер строки Excel для каждой строки frame (с 1)
 
 
 def read_raw(path: Path) -> pd.DataFrame:
@@ -137,6 +138,7 @@ def read_1c_table(path: Path) -> LoadedTable:
 
     frame = frame.dropna(axis="columns", how="all")  # убрать полностью пустые колонки
     frame = frame.dropna(axis="index", how="all")  # и полностью пустые строки
+    source_rows = tuple(int(index) + 1 for index in frame.index)  # запомнить строки Excel
     frame = frame.reset_index(drop=True)  # пронумеровать строки заново с 0
 
     return LoadedTable(
@@ -144,6 +146,7 @@ def read_1c_table(path: Path) -> LoadedTable:
         header_row=header_index + 1,
         header_depth=depth,
         report_count=read_report_count(raw, header_index),
+        source_rows=source_rows,
     )
 
 

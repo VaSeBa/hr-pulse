@@ -7,6 +7,7 @@
 import sys
 from pathlib import Path
 
+from hr_pulse.demo.dirty import spoil_employees
 from hr_pulse.demo.export_1c import (
     write_employees_report,
     write_reasons_reference,
@@ -26,6 +27,10 @@ def main() -> None:
     write_employees_report(rows, folder / "Сотрудники_демо.xlsx", mislabel_fire_date=True)
     write_reasons_report(rows, folder / "Причины_увольнений_демо.xlsx", period=period)
     write_reasons_reference(folder / "Справочник_причин_демо.xlsx")
+
+    dirty = folder / "Сотрудники_с_ошибками_демо.xlsx"  # для проверки качества данных
+    write_employees_report(rows, dirty, mislabel_fire_date=True)
+    spoil_employees(dirty)
 
     print(f"Готово: {len(rows)} эпизодов. Файлы в папке {folder.resolve()}")
 
