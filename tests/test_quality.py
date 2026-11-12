@@ -176,4 +176,8 @@ def test_every_planted_error_found(tmp_path):
     assert found["Дата приёма: позже сегодняшнего дня"] == planted["future"]
     assert found["Табельный номер повторяется"] == planted["duplicate_tab"]
     assert found["Должность: пусто"] == planted["position_blank"]
-    assert len(found) == 7  # и ничего лишнего
+    assert (
+        found["СНИЛС хранился как число — потерялись ведущие нули"] == (planted["snils_lost_zeros"])
+    )
+    assert found["СНИЛС одного человека записан по-разному"] == planted["snils_forms"]
+    assert len(found) == 9  # и ничего лишнего

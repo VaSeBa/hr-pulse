@@ -10,6 +10,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from hr_pulse.core.formats_1c import parse_ru_date, ru_date
+from hr_pulse.core.snils import snils_checksum
 
 # Колонки выгрузки «Личные данные сотрудников» (см. EMPLOYEES_HEADER в export_1c.py)
 TAB, POSITION, HIRE, FIRE, SNILS = "A", "F", "G", "H", "J"
@@ -38,6 +39,14 @@ def spoil_employees(path: Path) -> dict[str, list[int]]:
 
     ws[f"{POSITION}30"] = None  # пустая должность
 
+    # СНИЛС с ведущим нулём, записанный как ЧИСЛО: Excel ноль «съест»
+    number = "012345678"
+    ws[f"{SNILS}36"] = int(f"{number}{snils_checksum(number):02d}")
+
+    # Повторно принятый человек: во втором эпизоде СНИЛС записан без дефисов и пробела
+    first, second = _first_rehire_after(ws, row=40)
+    ws[f"{SNILS}{second}"] = ws[f"{SNILS}{first}"].value.replace("-", "").replace(" ", "")
+
     wb.save(path)
     return {
         "snils_blank": [12],
@@ -47,4 +56,17 @@ def spoil_employees(path: Path) -> dict[str, list[int]]:
         "future": [24],
         "duplicate_tab": [26, 27],
         "position_blank": [30],
+        "snils_lost_zeros": [36],
+        "snils_forms": [first, second],
     }
+
+
+def _first_rehire_after(ws, row: int) -> tuple[int, int]:
+    """Две строки (ниже row) с одним СНИЛС — эпизоды одного повторно принятого человека."""
+    seen: dict[str, int] = {}
+    for current in range(row, ws.max_row + 1):
+        value = ws[f"{SNILS}{current}"].value
+        if value in seen:
+            return seen[value], current
+        seen[value] = current
+    raise ValueError("в демо-выгрузке нет повторно принятых")

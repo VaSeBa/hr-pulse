@@ -14,7 +14,7 @@ import pandas as pd
 
 from hr_pulse.core.fields import Field, get_spec
 from hr_pulse.core.formats_1c import is_blank, parse_ru_date
-from hr_pulse.core.snils import is_valid_snils
+from hr_pulse.core.snils import SNILS_LENGTH, clean_snils, is_valid_snils, restore_zeros
 from hr_pulse.ingest.merge import clean_tab_number
 
 BLANK_IS_ERROR = (Field.TAB_NUMBER, Field.SNILS, Field.HIRE_DATE, Field.POSITION, Field.DEPARTMENT)
@@ -92,9 +92,42 @@ def check_blanks(frame: pd.DataFrame, source_rows: tuple[int, ...]) -> list[Issu
 def check_snils(frame: pd.DataFrame, source_rows: tuple[int, ...]) -> list[Issue]:
     """СНИЛС заполнен, но неправильный: не 11 цифр или не сходится контрольное число."""
     column = frame[Field.SNILS.value]
-    flags = [not is_blank(v) and not is_valid_snils(str(v)) for v in column]
+    flags = [not is_blank(v) and not is_valid_snils(restore_zeros(str(v).strip())) for v in column]
     title = "СНИЛС: неверный (не 11 цифр или не сходится контрольное число)"
     return [Issue(title, Severity.ERROR, rows_where(flags, source_rows))]
+
+
+def raw_text(value: object) -> str | None:
+    """Значение ячейки как текст без пробелов по краям; пусто — None."""
+    return None if is_blank(value) else str(value).strip()
+
+
+def check_snils_forms(frame: pd.DataFrame, source_rows: tuple[int, ...]) -> list[Issue]:
+    """СНИЛС правильный, но записан «неаккуратно»: без нулей или по-разному у одного человека."""
+    column = frame[Field.SNILS.value]
+    texts = [raw_text(value) for value in column]  # списки Python: None останется None
+    cleaned = [clean_snils(value) for value in column]
+
+    lost_zeros = [
+        text is not None and text.isdigit() and len(text) < SNILS_LENGTH and clean is not None
+        for text, clean in zip(texts, cleaned, strict=True)
+    ]
+    by_person = pd.Series(texts, dtype="object").groupby(pd.Series(cleaned, dtype="object"))
+    forms = by_person.transform("nunique")  # сколько разных записей у одного человека
+    differ = forms.gt(1)  # больше одной — записан по-разному
+
+    return [
+        Issue(
+            "СНИЛС хранился как число — потерялись ведущие нули",
+            Severity.WARNING,
+            rows_where(lost_zeros, source_rows),
+        ),
+        Issue(
+            "СНИЛС одного человека записан по-разному",
+            Severity.WARNING,
+            rows_where(differ, source_rows),
+        ),
+    ]
 
 
 def check_dates(frame: pd.DataFrame, source_rows: tuple[int, ...], today: date) -> list[Issue]:
@@ -135,6 +168,7 @@ def run_checks(
     issues = check_blanks(frame, source_rows)
     if Field.SNILS.value in frame.columns:
         issues += check_snils(frame, source_rows)
+        issues += check_snils_forms(frame, source_rows)
     issues += check_dates(frame, source_rows, today)
     if Field.TAB_NUMBER.value in frame.columns:
         issues += check_duplicate_tabs(frame, source_rows)

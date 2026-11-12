@@ -17,6 +17,7 @@ import pandas as pd
 
 from hr_pulse.core.fields import Field, get_spec
 from hr_pulse.core.formats_1c import is_blank
+from hr_pulse.core.snils import clean_snils
 from hr_pulse.ingest.convert import parse_date_columns
 from hr_pulse.ingest.mapping import apply_mapping, map_columns
 from hr_pulse.ingest.reader import read_1c_table
@@ -78,6 +79,7 @@ def merge_reasons(employees: pd.DataFrame, reasons: pd.DataFrame) -> MergeResult
     # ФИО для аналитики не нужно — выбрасываем сразу (минимизация ПДн, 152-ФЗ)
     left = employees.drop(columns=[Field.FULL_NAME.value], errors="ignore").copy()
     left[KEY] = left[KEY].map(clean_tab_number)
+    left[Field.SNILS.value] = left[Field.SNILS.value].map(clean_snils)  # один человек — один вид
     left = parse_date_columns(left, [Field.HIRE_DATE.value, Field.FIRE_DATE.value])
 
     right = reasons[[KEY, Field.FIRE_DATE.value, Field.FIRE_REASON.value]].copy()
