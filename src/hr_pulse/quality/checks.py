@@ -175,14 +175,20 @@ def run_checks(
     return [issue for issue in issues if issue.rows]
 
 
+def short_rows(rows: tuple[int, ...], limit: int = ROWS_SHOWN) -> str:
+    """Первые номера строк через запятую и «и ещё N», если их больше limit."""
+    shown = ", ".join(str(row) for row in rows[:limit])
+    if len(rows) > limit:
+        return f"{shown} и ещё {len(rows) - limit}"
+    return shown
+
+
 def describe_issues(issues: list[Issue]) -> list[str]:
     """Итог для экрана: проблема, сколько строк и первые номера строк Excel."""
     if not issues:
         return ["Проблем не найдено"]
     lines = []
     for issue in issues:
-        shown = ", ".join(str(row) for row in issue.rows[:ROWS_SHOWN])
-        more = f" и ещё {len(issue.rows) - ROWS_SHOWN}" if len(issue.rows) > ROWS_SHOWN else ""
         lines.append(f"[{issue.severity}] {issue.title} — {len(issue.rows)}")
-        lines.append(f"   строки Excel: {shown}{more}")
+        lines.append(f"   строки Excel: {short_rows(issue.rows)}")
     return lines
