@@ -2,18 +2,18 @@
         [--fire-date "Адрес места проживания"] [--reference справочник.xlsx]
         [--db data/hr_pulse.db] [--on 30.09.2026]
 
-Склеивает отчёты (шаги 3.2–3.4), записывает эпизоды в базу и показывает
-численность на дату, посчитанную уже запросом SQL. Печатает только числа.
+Склеивает отчёты (шаги 3.2–3.4), загружает эпизоды в базу (новые — добавляет,
+известные — обновляет) и показывает численность на дату, посчитанную запросом SQL.
+Запускать можно сколько угодно раз — дублей не будет. Печатает только числа.
 """
 
 import argparse
-import sqlite3
 from datetime import date
 from pathlib import Path
 
 from hr_pulse.core.fields import Field
 from hr_pulse.core.formats_1c import parse_ru_date, ru_date
-from hr_pulse.db.storage import DEFAULT_DB, connect, count_episodes, headcount, save_episodes
+from hr_pulse.db.storage import DEFAULT_DB, connect, count_episodes, headcount, upsert_episodes
 from hr_pulse.ingest.merge import load_mapped, merge_reasons
 from hr_pulse.ingest.reasons import apply_reference, load_reference
 from hr_pulse.ingest.rehires import mark_rehires
@@ -41,15 +41,12 @@ def main() -> None:
         raise SystemExit(1) from error
 
     conn = connect(args.db)
-    try:
-        saved = save_episodes(conn, frame)
-    except sqlite3.IntegrityError as error:
-        print("Эти эпизоды уже есть в базе. Повторную загрузку научимся делать в шаге 5.2.")
-        print(f"Чтобы начать заново, удалите файл базы: {args.db}")
-        raise SystemExit(1) from error
+    stats = upsert_episodes(conn, frame)
 
     day = parse_ru_date(args.on) if args.on else date.today()
-    print(f"Записано эпизодов: {saved}")
+    print(f"Новых эпизодов: {stats.new}")
+    print(f"Изменилось: {stats.changed}")
+    print(f"Без изменений: {stats.same}")
     print(f"Всего в базе: {count_episodes(conn)}")
     print(f"Списочная численность на {ru_date(day)}: {headcount(conn, day)}")
     conn.close()

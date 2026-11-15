@@ -6,6 +6,7 @@ SQLite — это база в одном файле (data/hr_pulse.db). Серв
 """
 
 import sqlite3
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -89,6 +90,59 @@ def save_episodes(conn: sqlite3.Connection, frame: pd.DataFrame) -> int:
     with conn:  # всё или ничего: при ошибке ни одна строка не запишется
         conn.executemany(f"INSERT INTO episodes ({columns}) VALUES ({marks})", rows)
     return len(rows)
+
+
+def update_clause(columns: tuple[str, ...]) -> str:
+    """Часть SQL «что обновить»: «snils = excluded.snils, position = excluded.position, …».
+
+    excluded — так SQLite называет строку, которую мы пытались вставить.
+    Первая колонка — ключ (tab_number), её не обновляем.
+    """
+    return ", ".join(f"{column} = excluded.{column}" for column in columns[1:])
+
+
+@dataclass(frozen=True)
+class LoadStats:
+    """Итог загрузки: сколько эпизодов новых, изменённых и прежних."""
+
+    new: int  # такого табельного в базе не было
+    changed: int  # был, но что-то поменялось (например, появилась дата увольнения)
+    same: int  # был и совпал полностью
+
+
+def classify(rows: list[tuple], existing: dict[str, tuple]) -> LoadStats:
+    """Сравнить строки загрузки с тем, что уже лежит в базе (ключ — табельный номер)."""
+    new = changed = same = 0
+    for row in rows:
+        before = existing.get(row[0])
+        if before is None:
+            new += 1
+        elif before != row:
+            changed += 1
+        else:
+            same += 1
+    return LoadStats(new=new, changed=changed, same=same)
+
+
+def upsert_episodes(conn: sqlite3.Connection, frame: pd.DataFrame) -> LoadStats:
+    """Загрузить эпизоды: новых — добавить, известных — обновить. Повторная загрузка безопасна.
+
+    Это и есть помесячная догрузка: октябрьская выгрузка добавит новых сотрудников
+    и проставит даты увольнения тем, кто ушёл в октябре, — без дублей.
+    """
+    columns = ", ".join(COLUMNS)
+    marks = ", ".join("?" for _ in COLUMNS)
+    rows = episode_rows(frame)
+    existing = {row[0]: row for row in conn.execute(f"SELECT {columns} FROM episodes")}
+    stats = classify(rows, existing)
+
+    sql = (
+        f"INSERT INTO episodes ({columns}) VALUES ({marks}) "
+        f"ON CONFLICT(tab_number) DO UPDATE SET {update_clause(COLUMNS)}"
+    )
+    with conn:
+        conn.executemany(sql, rows)
+    return stats
 
 
 HEADCOUNT_SQL = """

@@ -14,6 +14,7 @@ from hr_pulse.demo.export_1c import (
     write_reasons_report,
 )
 from hr_pulse.demo.generator import FakeCompany, GeneratorConfig
+from hr_pulse.demo.monthly import OCTOBER_END, october_rows
 
 
 def main() -> None:
@@ -27,6 +28,15 @@ def main() -> None:
     write_employees_report(rows, folder / "Сотрудники_демо.xlsx", mislabel_fire_date=True)
     write_reasons_report(rows, folder / "Причины_увольнений_демо.xlsx", period=period)
     write_reasons_reference(folder / "Справочник_причин_демо.xlsx")
+
+    october = october_rows(rows)  # «следующий месяц» — для догрузки в базу
+    write_employees_report(
+        october, folder / "Сотрудники_октябрь_демо.xlsx", mislabel_fire_date=True
+    )
+    october_period = f"01.01.2024 - {OCTOBER_END.strftime('%d.%m.%Y')}"
+    write_reasons_report(
+        october, folder / "Причины_увольнений_октябрь_демо.xlsx", period=october_period
+    )
 
     dirty = folder / "Сотрудники_с_ошибками_демо.xlsx"  # для проверки качества данных
     write_employees_report(rows, dirty, mislabel_fire_date=True)
