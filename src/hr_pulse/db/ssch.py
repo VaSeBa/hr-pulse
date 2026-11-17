@@ -50,7 +50,6 @@ def month_label(month: str) -> str:
 
 def parse_month(text: str) -> str:
     """Месяц от человека: «10.2026» → «2026-10». Неверный месяц → ValueError."""
-    # Каркас готов — замените каждое «...» по подсказке из комментария справа.
     text = text.strip()
     if text.count(".") != 1:  # шаг 1: ровно одна точка
         raise ValueError(f"{MONTH_HINT}, а не {text!r}")
