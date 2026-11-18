@@ -92,13 +92,38 @@ def save_episodes(conn: sqlite3.Connection, frame: pd.DataFrame) -> int:
     return len(rows)
 
 
-def update_clause(columns: tuple[str, ...]) -> str:
+# Колонки, которые пустое значение НЕ затирает (шаг 6.2). Их заполняют
+# необязательные файлы — причины увольнения и справочник «Входит / Не входит».
+# Загрузили выгрузку без них — в базе остаётся то, что было.
+KEEP_IF_EMPTY = ("fire_reason", "counts_in_turnover")
+
+
+def update_clause(columns: tuple[str, ...], keep: tuple[str, ...] = ()) -> str:
     """Часть SQL «что обновить»: «snils = excluded.snils, position = excluded.position, …».
 
     excluded — так SQLite называет строку, которую мы пытались вставить.
     Первая колонка — ключ (tab_number), её не обновляем.
+    Колонки из keep обновляются только непустым значением:
+    «fire_reason = COALESCE(excluded.fire_reason, fire_reason)».
     """
-    return ", ".join(f"{column} = excluded.{column}" for column in columns[1:])
+    parts = []
+    for column in columns[1:]:
+        if column in keep:
+            parts.append(f"{column} = COALESCE(excluded.{column}, {column})")
+        else:
+            parts.append(f"{column} = excluded.{column}")
+    return ", ".join(parts)
+
+
+def with_kept(row: tuple, before: tuple) -> tuple:
+    """Строка загрузки, где пустые значения колонок KEEP_IF_EMPTY заменены прежними.
+
+    Нужна, чтобы статистика загрузки совпадала с тем, что реально окажется в базе.
+    """
+    return tuple(
+        old if new is None and column in KEEP_IF_EMPTY else new
+        for column, new, old in zip(COLUMNS, row, before, strict=True)
+    )
 
 
 @dataclass(frozen=True)
@@ -134,11 +159,12 @@ def upsert_episodes(conn: sqlite3.Connection, frame: pd.DataFrame) -> LoadStats:
     marks = ", ".join("?" for _ in COLUMNS)
     rows = episode_rows(frame)
     existing = {row[0]: row for row in conn.execute(f"SELECT {columns} FROM episodes")}
-    stats = classify(rows, existing)
+    effective = [with_kept(row, existing[row[0]]) if row[0] in existing else row for row in rows]
+    stats = classify(effective, existing)
 
     sql = (
         f"INSERT INTO episodes ({columns}) VALUES ({marks}) "
-        f"ON CONFLICT(tab_number) DO UPDATE SET {update_clause(COLUMNS)}"
+        f"ON CONFLICT(tab_number) DO UPDATE SET {update_clause(COLUMNS, KEEP_IF_EMPTY)}"
     )
     with conn:
         conn.executemany(sql, rows)
