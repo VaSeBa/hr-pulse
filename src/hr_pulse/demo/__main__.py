@@ -15,6 +15,7 @@ from hr_pulse.demo.export_1c import (
 )
 from hr_pulse.demo.generator import FakeCompany, GeneratorConfig
 from hr_pulse.demo.monthly import OCTOBER_END, october_rows
+from hr_pulse.demo.report_file import write_turnover_report
 from hr_pulse.demo.ssch_file import write_ssch_report
 
 
@@ -41,6 +42,8 @@ def main() -> None:
 
     # ССЧ «от бухгалтерии» за 2024 — июнь 2026 (июль–октябрь 2026 вводили руками в 5.4 и 6.1)
     write_ssch_report(october, folder / "ССЧ_демо.xlsx", "2024-01", "2026-06")
+    # «Ваш» отчёт о текучести за сентябрь и октябрь — эталон для приёмочного теста (шаг 6.4)
+    write_turnover_report(october, folder / "Текучесть_отчёт_демо.xlsx", ["2026-09", "2026-10"])
 
     dirty = folder / "Сотрудники_с_ошибками_демо.xlsx"  # для проверки качества данных
     write_employees_report(rows, dirty, mislabel_fire_date=True)
